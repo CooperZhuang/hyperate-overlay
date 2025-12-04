@@ -162,53 +162,39 @@ def _get_commit_message(current_version: str, new_version: str):
     default_msg = f"chore: bump version to {new_version}"
     print(f"默认提交信息: '{default_msg}'")
 
-    # 询问用户是否要输入多行提交信息
+    # 询问用户提交信息输入方式
     print("\n请选择提交信息输入方式:")
     print("1) 单行输入 (默认)")
-    print("2) 多行输入 (适合详细说明)")
+    print("2) 使用编辑器输入 (推荐，适合多行详细说明)")
+    print("   选择此项将打开VSCode编辑器，您可以在编辑器中输入多行提交信息")
 
     input_choice = input("请选择 (1 或 2，默认 1): ").strip()
-    if input_choice == "2":
-        print("\n⚠️  注意：在Windows PowerShell中粘贴多行文本可能会出现问题")
-        print("   建议使用以下方法之一：")
-        print("   a) 逐行输入，最后输入一个空行结束")
-        print("   b) 使用单行输入，用 '\\n' 表示换行")
-        print("   c) 使用命令行模式的 --commit-message 参数")
-        print()
-        print("请输入多行提交信息（逐行输入，输入空行结束）:")
-        lines = []
-        while True:
-            try:
-                line = input()
-                if line == "":
-                    break
-                lines.append(line)
-            except EOFError:
-                break
 
-        # 如果用户直接按 Enter 而没有输入任何内容，使用默认值
-        if not lines:
-            commit_msg = default_msg
-        else:
-            commit_msg = "\n".join(lines)
+    if input_choice == "2":
+        # 使用编辑器输入
+        print("\n✅ 将使用编辑器输入提交信息")
+        print("   提交时将打开VSCode编辑器，您可以在编辑器中输入多行提交信息")
+        print("   保存并关闭编辑器后，提交将继续执行")
+        return new_version, None  # 返回 None 表示使用编辑器
     else:
+        # 单行输入
         custom_msg = input("请输入提交信息 (直接回车使用默认值): ").strip()
         commit_msg = custom_msg if custom_msg else default_msg
 
-    # 确认步骤
-    print()
-    print("请确认以下设置:")
-    print(f"当前版本: {current_version}")
-    print(f"新版本: {new_version}")
-    print(f"提交信息: {commit_msg}")
-    print()
+        # 确认步骤
+        print()
+        print("请确认以下设置:")
+        print(f"当前版本: {current_version}")
+        print(f"新版本: {new_version}")
+        print(f"提交信息: {commit_msg}")
+        print()
 
-    confirm = input("确认提交更改? (y/N): ").strip().lower()
-    if confirm != "y":
-        print("❌ 用户取消")
-        sys.exit(0)
+        confirm = input("确认提交更改? (y/N): ").strip().lower()
+        if confirm != "y":
+            print("❌ 用户取消")
+            sys.exit(0)
 
-    return new_version, commit_msg
+        return new_version, commit_msg
 
 
 def interactive_mode():
@@ -313,8 +299,9 @@ def commit_changes(version: str, commit_type: str = "chore") -> bool:
     """提交更改"""
     print("\n📝 提交更改...")
 
-    # 添加文件
-    success, output = run_command("git add pyproject.toml uv.lock")
+    # 添加所有更改的文件
+    print("添加所有更改的文件...")
+    success, output = run_command("git add .")
     if not success:
         print(f"❌ 添加文件失败: {output}")
         return False
@@ -330,20 +317,32 @@ def commit_changes(version: str, commit_type: str = "chore") -> bool:
         return False
 
 
-def commit_with_message(commit_msg: str) -> bool:
-    """使用自定义提交信息提交更改"""
+def commit_with_message(commit_msg: Optional[str]) -> bool:
+    """使用自定义提交信息提交更改，如果commit_msg为None则使用编辑器"""
     print("\n📝 提交更改...")
 
-    # 添加文件
-    success, output = run_command("git add pyproject.toml uv.lock")
+    # 添加所有更改的文件
+    print("添加所有更改的文件...")
+    success, output = run_command("git add .")
     if not success:
         print(f"❌ 添加文件失败: {output}")
         return False
 
     # 提交
-    success, output = run_command(f'git commit -m "{commit_msg}"')
+    if commit_msg is None:
+        # 使用编辑器输入提交信息
+        print("正在打开VSCode编辑器输入提交信息...")
+        print("请在编辑器中输入提交信息，保存并关闭编辑器后继续")
+        success, output = run_command("git commit")
+    else:
+        # 使用命令行提交信息
+        success, output = run_command(f'git commit -m "{commit_msg}"')
+
     if success:
-        print(f"✅ 提交完成: {commit_msg}")
+        if commit_msg is None:
+            print("✅ 提交完成（使用编辑器输入）")
+        else:
+            print(f"✅ 提交完成: {commit_msg}")
         return True
     else:
         print(f"❌ 提交失败: {output}")
