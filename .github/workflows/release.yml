@@ -101,10 +101,12 @@ jobs:
           draft: false
           prerelease: false
           generate_release_notes: true # 同时使用GitHub的自动生成发布说明
+          tag_name: "v${{ steps.get_version.outputs.version }}"
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Upload source code as asset
+        if: steps.create_release.outputs.tag_name != ''
         run: |
           # 创建源代码压缩包
           VERSION="${{ steps.get_version.outputs.version }}"
