@@ -59,9 +59,7 @@ jobs:
       - name: Run tests (optional)
         run: |
           echo "运行基本代码检查..."
-          # 这里可以添加测试命令，例如：
-          # python -m pytest tests/
-          # 或者简单的语法检查
+          # 检查根目录中的Python文件
           python -m py_compile *.py
           echo "代码检查完成"
 
