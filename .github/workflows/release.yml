@@ -3,18 +3,22 @@ name: Create Release
 on:
   push:
     tags:
-      - 'v*'  # 匹配 v1.0.0, v0.2.1 等语义化版本标签
+      - "v*" # 匹配 v1.0.0, v0.2.1 等语义化版本标签
+
+# 增加GITHUB_TOKEN的权限
+permissions:
+  contents: write # 允许创建Release和上传资产
 
 jobs:
   release:
     name: Create GitHub Release
     runs-on: ubuntu-latest
-    
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
         with:
-          fetch-depth: 0  # 获取所有历史记录用于生成变更日志
+          fetch-depth: 0 # 获取所有历史记录用于生成变更日志
 
       - name: Extract version from tag
         id: get_version
@@ -23,7 +27,7 @@ jobs:
           VERSION="${GITHUB_REF#refs/tags/v}"
           echo "Extracted version: $VERSION"
           echo "version=$VERSION" >> $GITHUB_OUTPUT
-          
+
           # 验证版本号格式
           if [[ ! "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[a-zA-Z0-9\.]+)?(\+[a-zA-Z0-9\.]+)?$ ]]; then
             echo "错误：版本号 '$VERSION' 不符合语义化版本格式 (x.y.z)"
@@ -35,10 +39,10 @@ jobs:
           # 从 pyproject.toml 读取版本号
           PYPROJECT_VERSION=$(grep -E '^version = ' pyproject.toml | cut -d'"' -f2)
           TAG_VERSION="${{ steps.get_version.outputs.version }}"
-          
+
           echo "pyproject.toml 版本: $PYPROJECT_VERSION"
           echo "标签版本: $TAG_VERSION"
-          
+
           # 建议检查版本一致性（可选）
           if [ "$PYPROJECT_VERSION" != "$TAG_VERSION" ]; then
             echo "⚠️  警告：pyproject.toml 版本 ($PYPROJECT_VERSION) 与标签版本 ($TAG_VERSION) 不一致"
@@ -48,7 +52,7 @@ jobs:
       - name: Setup Python
         uses: actions/setup-python@v5
         with:
-          python-version: '3.14'
+          python-version: "3.14"
 
       - name: Install dependencies
         run: |
@@ -71,7 +75,7 @@ jobs:
           echo "" >> CHANGELOG.md
           echo "### 发布日期: $(date +'%Y-%m-%d')" >> CHANGELOG.md
           echo "" >> CHANGELOG.md
-          
+
           # 获取上一个标签（如果有）
           if git describe --tags --abbrev=0 HEAD~1 2>/dev/null; then
             PREV_TAG=$(git describe --tags --abbrev=0 HEAD~1)
@@ -83,7 +87,7 @@ jobs:
             echo "" >> CHANGELOG.md
             git log --pretty=format:"- %s (%h)" --reverse >> CHANGELOG.md
           fi
-          
+
           echo "" >> CHANGELOG.md
           echo "---" >> CHANGELOG.md
           echo "*自动生成于 GitHub Actions*" >> CHANGELOG.md
@@ -96,7 +100,7 @@ jobs:
           body_path: CHANGELOG.md
           draft: false
           prerelease: false
-          generate_release_notes: true  # 同时使用GitHub的自动生成发布说明
+          generate_release_notes: true # 同时使用GitHub的自动生成发布说明
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
@@ -105,7 +109,7 @@ jobs:
           # 创建源代码压缩包
           VERSION="${{ steps.get_version.outputs.version }}"
           ARCHIVE_NAME="hyperate-overlay-v$VERSION-source.zip"
-          
+
           # 排除不需要的文件
           zip -r "$ARCHIVE_NAME" . \
             -x "*.git*" \
@@ -115,9 +119,9 @@ jobs:
             -x ".env" \
             -x ".venv/*" \
             -x "*.egg-info/*"
-          
+
           echo "源代码包已创建: $ARCHIVE_NAME"
-          
+
           # 上传到Release
           gh release upload "${{ steps.create_release.outputs.tag_name }}" "$ARCHIVE_NAME" \
             --clobber
