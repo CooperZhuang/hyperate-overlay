@@ -9,3 +9,20 @@ dependencies = [
     "websockets>=15.0.1",
     "python-dotenv>=1.0.0",
 ]
+
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+# 对于扁平布局（flat layout），使用py-modules而不是packages
+[tool.setuptools]
+py-modules = ["main", "config", "ui", "websocket_client"]
+
+# 或者使用动态发现
+# packages = find:
+
+[tool.setuptools.package-data]
+"*" = ["*.py", "*.pyi"]
+
+[project.scripts]
+hyperate-overlay = "main:main"
