@@ -262,6 +262,45 @@ uv tree
 python main.py
 ```
 
+## 自动发布
+
+项目使用GitHub Actions实现自动化版本发布。当推送语义化版本标签（如 `v1.0.0`）到GitHub时，会自动触发发布流程。
+
+### 发布流程
+
+1. **更新版本号**：在 `pyproject.toml` 中更新 `version` 字段
+2. **创建标签**：使用语义化版本格式创建标签
+
+   ```bash
+   git tag v1.0.0
+   ```
+
+3. **推送标签**：将标签推送到GitHub
+
+   ```bash
+   git push origin v1.0.0
+   ```
+
+### 自动执行的操作
+
+- ✅ 验证标签格式（语义化版本）
+- ✅ 检查 `pyproject.toml` 版本一致性
+- ✅ 运行基本代码检查
+- ✅ 自动生成变更日志
+- ✅ 创建GitHub Release
+- ✅ 打包源代码为ZIP文件
+- ✅ 上传源代码包到Release
+
+### 发布配置
+
+- **工作流文件**: `.github/workflows/release.yml`
+- **触发条件**: 推送 `v*` 标签
+- **发布模板**: `.github/release-template.md`
+
+### 查看发布
+
+发布完成后，可以在 [GitHub Releases](https://github.com/CooperZhuang/hyperate-overlay/releases) 页面查看所有版本。
+
 ## 故障排除
 
 ### 常见问题
