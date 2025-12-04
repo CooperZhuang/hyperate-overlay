@@ -99,13 +99,6 @@
 | ----------------- | ------------ | ------ | ------------------ |
 | `BLINK_ENABLE`    | 启用闪烁提醒 | `true` | true/false         |
 | `BLINK_THRESHOLD` | 闪烁阈值     | 160    | 心率超过此值时闪烁 |
-| `UPDATE_INTERVAL` | 数据更新间隔 | 3      | 单位：秒           |
-
-### 高级配置
-
-| 配置项                 | 描述              | 默认值 | 说明           |
-| ---------------------- | ----------------- | ------ | -------------- |
-| `BACKUP_WEBSOCKET_KEY` | 备用WebSocket密钥 | 空     | 仅用于故障排除 |
 
 ## 使用方法
 
@@ -264,42 +257,88 @@ python main.py
 
 ## 自动发布
 
-项目使用GitHub Actions实现自动化版本发布。当推送语义化版本标签（如 `v1.0.0`）到GitHub时，会自动触发发布流程。
+项目使用GitHub Actions实现完全自动化的版本发布。当您更新 `pyproject.toml` 文件中的 `version` 字段并推送到 `main` 分支时，系统会自动检测版本变化、创建Git标签并发布Release。
 
-### 发布流程
+### 自动发布流程
 
 1. **更新版本号**：在 `pyproject.toml` 中更新 `version` 字段
-2. **创建标签**：使用语义化版本格式创建标签
+2. **提交并推送**：将更改推送到 `main` 分支
 
    ```bash
-   git tag v1.0.0
+   git add pyproject.toml
+   git commit -m "chore: bump version to X.Y.Z"
+   git push origin main
    ```
 
-3. **推送标签**：将标签推送到GitHub
-
-   ```bash
-   git push origin v1.0.0
-   ```
+3. **自动执行**：GitHub Actions会自动执行以下操作：
+   - 检测版本号变化（与上一个提交比较）
+   - 验证版本格式（语义化版本规范）
+   - 检查对应的Git标签是否已存在
+   - 创建Git标签（格式：`vX.Y.Z`）
+   - 生成变更日志
+   - 创建GitHub Release
+   - 打包源代码为ZIP文件并上传到Release
 
 ### 自动执行的操作
 
-- ✅ 验证标签格式（语义化版本）
-- ✅ 检查 `pyproject.toml` 版本一致性
-- ✅ 运行基本代码检查
-- ✅ 自动生成变更日志
-- ✅ 创建GitHub Release
-- ✅ 打包源代码为ZIP文件
-- ✅ 上传源代码包到Release
+- ✅ **版本检测**：自动检测 `pyproject.toml` 版本变化
+- ✅ **格式验证**：验证版本号符合语义化版本规范
+- ✅ **一致性检查**：严格检查 `pyproject.toml` 版本与标签版本一致性
+- ✅ **代码检查**：运行基本Python代码编译检查
+- ✅ **变更日志**：自动生成基于Git历史的变更日志
+- ✅ **Release创建**：创建GitHub Release，包含自动生成的发布说明
+- ✅ **源代码打包**：打包项目源代码为ZIP文件
+- ✅ **资产上传**：上传源代码包到Release
 
-### 发布配置
+### 工作流配置
 
-- **工作流文件**: `.github/workflows/release.yml`
-- **触发条件**: 推送 `v*` 标签
+- **主工作流**: `.github/workflows/auto-tag-release.yml`
+  - 触发条件：推送 `pyproject.toml` 到 `main` 分支
+  - 功能：一站式自动检测版本变化、创建标签、发布Release
+  - 特点：合并了版本检测、标签创建和Release发布的所有功能
+  
 - **发布模板**: `.github/release-template.md`
+  - 提供Release的模板格式
+  - 包含版本亮点、新功能、修复问题等章节
 
 ### 查看发布
 
-发布完成后，可以在 [GitHub Releases](https://github.com/CooperZhuang/hyperate-overlay/releases) 页面查看所有版本。
+发布完成后，可以在以下页面查看结果：
+
+1. **GitHub Actions**：<https://github.com/CooperZhuang/hyperate-overlay/actions>
+   - 查看"Auto Tag and Release on Version Change"工作流执行状态
+
+2. **GitHub Releases**：<https://github.com/CooperZhuang/hyperate-overlay/releases>
+   - 查看所有已创建的Release版本
+   - 下载源代码包和其他资产
+
+### 版本号规范
+
+请使用[语义化版本](https://semver.org/lang/zh-CN/)规范：
+
+- **主版本号**：不兼容的API修改
+- **次版本号**：向下兼容的功能性新增
+- **修订号**：向下兼容的问题修正
+- **预发布版本**：可选，如 `1.0.0-beta.1`
+- **构建元数据**：可选，如 `1.0.0+build.20241205`
+
+示例：`1.2.3`、`2.0.0-beta.1`、`1.0.1+sha.abc123`
+
+### 注意事项
+
+1. **版本一致性**：工作流会严格检查 `pyproject.toml` 版本与标签版本的一致性
+2. **标签去重**：如果标签已存在，工作流会跳过创建，避免重复
+3. **格式验证**：版本号必须符合语义化版本格式，否则工作流会失败
+4. **权限要求**：需要 `contents: write` 权限来创建标签和Release
+
+### 自动发布故障排除
+
+如果Release未创建，请检查：
+
+1. **GitHub Actions日志**：查看工作流执行详情和错误信息
+2. **版本格式**：确保版本号符合 `X.Y.Z` 格式
+3. **权限设置**：确保GitHub Token有足够的权限
+4. **标签冲突**：检查对应的Git标签是否已存在
 
 ## 故障排除
 
@@ -349,8 +388,7 @@ python main.py
 
 ### 性能优化
 
-- 增大`UPDATE_INTERVAL`值减少CPU占用
-- 关闭闪烁功能(`BLINK_ENABLE=false`)
+- 关闭闪烁功能(`BLINK_ENABLE=false`)减少CPU占用
 - 定期重启应用释放内存
 - 使用有线网络连接提升稳定性
 

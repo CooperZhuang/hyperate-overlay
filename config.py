@@ -39,7 +39,6 @@ def load_config():
         "BPM_COLOR": os.getenv("BPM_COLOR", "#FFFFFF"),
         "BG_TRANSPARENT": os.getenv("BG_TRANSPARENT", "true").lower() == "true",
         "OPACITY": float(os.getenv("OPACITY", "0.85")),
-        "UPDATE_INTERVAL": int(os.getenv("UPDATE_INTERVAL", "3")),
         "POS_X": int(os.getenv("POS_X", "50")),
         "POS_Y": int(os.getenv("POS_Y", "30")),
         "BLINK_ENABLE": os.getenv("BLINK_ENABLE", "true").lower() == "true",

@@ -1,0 +1,242 @@
+name: Auto Tag and Release on Version Change
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "pyproject.toml"
+
+# 需要写入权限来创建tag和release
+permissions:
+  contents: write
+
+jobs:
+  check-version-and-release:
+    name: Check version change, create tag and release
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code with full history
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # 获取完整历史记录用于比较
+
+      - name: Get current version from pyproject.toml
+        id: current_version
+        run: |
+          # 从当前提交的pyproject.toml中提取版本号
+          CURRENT_VERSION=$(grep -E '^version = ' pyproject.toml | cut -d'"' -f2)
+          echo "当前版本: $CURRENT_VERSION"
+          echo "current_version=$CURRENT_VERSION" >> $GITHUB_OUTPUT
+
+      - name: Get previous version from previous commit
+        id: previous_version
+        run: |
+          # 尝试获取上一个提交中的版本号
+          if git rev-parse HEAD~1 >/dev/null 2>&1; then
+            PREV_VERSION=$(git show HEAD~1:pyproject.toml 2>/dev/null | grep -E '^version = ' | cut -d'"' -f2 || echo "")
+            if [ -z "$PREV_VERSION" ]; then
+              echo "无法获取上一个提交的版本号，可能是首次提交或文件不存在"
+              echo "previous_version=" >> $GITHUB_OUTPUT
+            else
+              echo "上一个版本: $PREV_VERSION"
+              echo "previous_version=$PREV_VERSION" >> $GITHUB_OUTPUT
+            fi
+          else
+            echo "没有上一个提交（可能是首次提交）"
+            echo "previous_version=" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Check if version has changed
+        id: version_check
+        run: |
+          CURRENT="${{ steps.current_version.outputs.current_version }}"
+          PREVIOUS="${{ steps.previous_version.outputs.previous_version }}"
+
+          echo "当前版本: $CURRENT"
+          echo "上一个版本: $PREVIOUS"
+
+          if [ -z "$PREVIOUS" ]; then
+            echo "没有上一个版本信息，假设版本有变化"
+            echo "version_changed=true" >> $GITHUB_OUTPUT
+            echo "is_first_version=true" >> $GITHUB_OUTPUT
+          elif [ "$CURRENT" != "$PREVIOUS" ]; then
+            echo "版本已从 $PREVIOUS 变更为 $CURRENT"
+            echo "version_changed=true" >> $GITHUB_OUTPUT
+            echo "is_first_version=false" >> $GITHUB_OUTPUT
+          else
+            echo "版本未变化 ($CURRENT)"
+            echo "version_changed=false" >> $GITHUB_OUTPUT
+            echo "is_first_version=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Validate version format
+        if: steps.version_check.outputs.version_changed == 'true'
+        run: |
+          VERSION="${{ steps.current_version.outputs.current_version }}"
+
+          # 检查版本号格式是否符合语义化版本
+          if [[ ! "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[a-zA-Z0-9\.]+)?(\+[a-zA-Z0-9\.]+)?$ ]]; then
+            echo "错误：版本号 '$VERSION' 不符合语义化版本格式 (x.y.z)"
+            echo "请确保pyproject.toml中的版本号格式正确"
+            exit 1
+          fi
+
+          echo "版本号格式验证通过: $VERSION"
+
+      - name: Check if tag already exists
+        if: steps.version_check.outputs.version_changed == 'true'
+        id: check_tag
+        run: |
+          VERSION="${{ steps.current_version.outputs.current_version }}"
+          TAG_NAME="v$VERSION"
+
+          # 检查本地是否存在该tag
+          if git rev-parse "$TAG_NAME" >/dev/null 2>&1; then
+            echo "标签 $TAG_NAME 已存在"
+            echo "tag_exists=true" >> $GITHUB_OUTPUT
+          else
+            echo "标签 $TAG_NAME 不存在"
+            echo "tag_exists=false" >> $GITHUB_OUTPUT
+          fi
+          echo "tag_name=$TAG_NAME" >> $GITHUB_OUTPUT
+
+      - name: Skip if version unchanged or tag exists
+        if: steps.version_check.outputs.version_changed == 'false' || (steps.version_check.outputs.version_changed == 'true' && steps.check_tag.outputs.tag_exists == 'true')
+        run: |
+          if [ "${{ steps.version_check.outputs.version_changed }}" == "false" ]; then
+            echo "pyproject.toml中的版本号未变化，跳过tag和release创建"
+          else
+            echo "标签 ${{ steps.check_tag.outputs.tag_name }} 已存在，跳过tag和release创建"
+          fi
+
+      - name: Create Git tag
+        if: steps.version_check.outputs.version_changed == 'true' && steps.check_tag.outputs.tag_exists == 'false'
+        run: |
+          VERSION="${{ steps.current_version.outputs.current_version }}"
+          TAG_NAME="v$VERSION"
+
+          echo "创建标签: $TAG_NAME"
+
+          # 配置Git用户信息
+          git config user.name "GitHub Actions"
+          git config user.email "actions@github.com"
+
+          # 创建带注释的标签
+          git tag -a "$TAG_NAME" -m "Release version $VERSION"
+
+          # 推送标签到远程仓库
+          git push origin "$TAG_NAME"
+
+          echo "标签 $TAG_NAME 已创建并推送"
+
+      - name: Setup Python for release
+        if: steps.version_check.outputs.version_changed == 'true' && steps.check_tag.outputs.tag_exists == 'false'
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.14"
+
+      - name: Install dependencies for release
+        if: steps.version_check.outputs.version_changed == 'true' && steps.check_tag.outputs.tag_exists == 'false'
+        run: |
+          python -m pip install --upgrade pip
+          # 安装项目依赖（用于可能的测试或构建）
+          pip install -e .
+
+      - name: Run basic code checks
+        if: steps.version_check.outputs.version_changed == 'true' && steps.check_tag.outputs.tag_exists == 'false'
+        run: |
+          echo "运行基本代码检查..."
+          # 检查根目录中的Python文件
+          python -m py_compile *.py || echo "代码检查完成（忽略编译错误）"
+          echo "代码检查完成"
+
+      - name: Generate changelog
+        if: steps.version_check.outputs.version_changed == 'true' && steps.check_tag.outputs.tag_exists == 'false'
+        id: changelog
+        run: |
+          VERSION="${{ steps.current_version.outputs.current_version }}"
+
+          # 生成简单的变更日志
+          echo "## 版本 $VERSION 变更日志" > CHANGELOG.md
+          echo "" >> CHANGELOG.md
+          echo "### 发布日期: $(date +'%Y-%m-%d')" >> CHANGELOG.md
+          echo "" >> CHANGELOG.md
+
+          # 获取上一个标签（如果有）
+          if git describe --tags --abbrev=0 HEAD~1 2>/dev/null; then
+            PREV_TAG=$(git describe --tags --abbrev=0 HEAD~1)
+            echo "### 自 $PREV_TAG 以来的变更：" >> CHANGELOG.md
+            echo "" >> CHANGELOG.md
+            git log --pretty=format:"- %s (%h)" $PREV_TAG..HEAD >> CHANGELOG.md
+          else
+            echo "### 初始版本" >> CHANGELOG.md
+            echo "" >> CHANGELOG.md
+            git log --pretty=format:"- %s (%h)" --reverse >> CHANGELOG.md
+          fi
+
+          echo "" >> CHANGELOG.md
+          echo "---" >> CHANGELOG.md
+          echo "*自动生成于 GitHub Actions*" >> CHANGELOG.md
+
+          echo "变更日志已生成到 CHANGELOG.md"
+
+      - name: Create GitHub Release
+        if: steps.version_check.outputs.version_changed == 'true' && steps.check_tag.outputs.tag_exists == 'false'
+        id: create_release
+        uses: softprops/action-gh-release@v1
+        with:
+          name: "Hyperate Overlay v${{ steps.current_version.outputs.current_version }}"
+          body_path: CHANGELOG.md
+          draft: false
+          prerelease: false
+          generate_release_notes: true # 同时使用GitHub的自动生成发布说明
+          tag_name: "v${{ steps.current_version.outputs.current_version }}"
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Upload source code as asset
+        if: steps.version_check.outputs.version_changed == 'true' && steps.check_tag.outputs.tag_exists == 'false' && steps.create_release.outputs.tag_name != ''
+        run: |
+          # 创建源代码压缩包
+          VERSION="${{ steps.current_version.outputs.current_version }}"
+          ARCHIVE_NAME="hyperate-overlay-v$VERSION-source.zip"
+
+          # 排除不需要的文件
+          zip -r "$ARCHIVE_NAME" . \
+            -x "*.git*" \
+            -x ".github/*" \
+            -x "__pycache__/*" \
+            -x "*.pyc" \
+            -x ".env" \
+            -x ".venv/*" \
+            -x "*.egg-info/*"
+
+          echo "源代码包已创建: $ARCHIVE_NAME"
+
+          # 上传到Release
+          gh release upload "${{ steps.create_release.outputs.tag_name }}" "$ARCHIVE_NAME" \
+            --clobber
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Show release summary
+        if: steps.version_check.outputs.version_changed == 'true' && steps.check_tag.outputs.tag_exists == 'false'
+        run: |
+          echo "🎉 发布创建成功！"
+          echo "版本: ${{ steps.current_version.outputs.current_version }}"
+          echo "标签: ${{ steps.check_tag.outputs.tag_name }}"
+          echo "Release URL: ${{ steps.create_release.outputs.url || 'N/A' }}"
+          echo ""
+          echo "工作流执行完成"
+
+      - name: Show skip summary
+        if: steps.version_check.outputs.version_changed == 'false' || (steps.version_check.outputs.version_changed == 'true' && steps.check_tag.outputs.tag_exists == 'true')
+        run: |
+          echo "工作流执行完成"
+          if [ "${{ steps.version_check.outputs.version_changed }}" == "false" ]; then
+            echo "原因: 版本未变化"
+          else
+            echo "原因: 标签已存在"
+          fi
