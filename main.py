@@ -3,13 +3,11 @@
 
 """
 Hyperate 三值置顶悬浮窗（当前 / 最高 / 最低心率）
-完美适配你的页面结构，直接用 id 抓取
 Python 3.14 + uv + requests
-
-重构版本 - 模块化设计
 """
 
 from config import ConfigWatcher, load_config
+from rtss_integration import RTSSIntegration
 from ui import HeartRateUI
 from websocket_client import WebSocketClient
 
@@ -22,17 +20,39 @@ class HyperateTripleOverlay:
         # 初始化 UI
         self.ui = HeartRateUI(self.config)
 
+        # 初始化RTSS集成
+        self.rtss = RTSSIntegration(self.config)
+
         # 初始化配置监视器
         self.config_watcher = ConfigWatcher()
 
         # 初始化 WebSocket 客户端
-        self.ws_client = WebSocketClient(self.config, self.ui.update_heart_rate)
+        self.ws_client = WebSocketClient(self.config, self.update_heart_rate_callback)
 
         # 启动 WebSocket 连接
         self.ws_client.start()
 
         # 启动环境变量监视线程
         self.start_env_watch_thread()
+
+    def update_heart_rate_callback(self, heart_rate):
+        """
+        心率数据更新回调函数
+        根据显示模式更新UI和/或RTSS显示
+        """
+        # 获取显示模式
+        display_mode = self.config.get("DISPLAY_MODE", "both")
+
+        # 更新UI显示（如果显示模式不是仅RTSS）
+        if display_mode in ["both", "default"]:
+            self.ui.update_heart_rate(heart_rate)
+        else:
+            # 仅RTSS模式，仍然需要更新UI内部状态但不显示
+            self.ui.update_heart_rate(heart_rate, update_display=False)
+
+        # 更新RTSS显示（如果显示模式不是仅默认UI）
+        if display_mode in ["both", "rtss"] and self.rtss.is_enabled():
+            self.rtss.update_heart_rate(self.ui.current, self.ui.max_hr, self.ui.min_hr)
 
     def start_env_watch_thread(self):
         """启动环境变量监视线程"""
@@ -50,6 +70,8 @@ class HyperateTripleOverlay:
                         self.config = new_config
                         # 更新 UI 配置
                         self.ui.update_config(new_config)
+                        # 更新RTSS配置
+                        self.rtss.config = new_config
                 except Exception as e:
                     print(f"环境变量监视线程出错: {e}")
                 import time
@@ -66,8 +88,35 @@ class HyperateTripleOverlay:
 
             sys.exit(1)
 
-        # 运行 UI
-        self.ui.run()
+        # 显示启动信息
+        print("=" * 50)
+        print("Hyperate Triple Overlay 启动")
+        display_mode = self.config.get("DISPLAY_MODE", "both")
+        print(f"显示模式: {display_mode}")
+        print(f"RTSS集成: {'已启用' if self.rtss.is_enabled() else '已禁用'}")
+        print("=" * 50)
+
+        # 根据显示模式决定是否运行UI
+        if display_mode in ["both", "default"]:
+            # 运行 UI
+            self.ui.run()
+        else:
+            # rtss模式：不显示UI窗口，但保持应用运行
+            print("RTSS模式：UI窗口已隐藏，仅RTSS OSD显示")
+            print("按Ctrl+C退出应用")
+
+            # 保持应用运行以处理心率数据
+            try:
+                import time
+
+                while True:
+                    time.sleep(1)
+            except KeyboardInterrupt:
+                print("接收到退出信号")
+
+        # 应用退出时清理RTSS显示
+        if self.rtss.is_enabled():
+            self.rtss.clear_display()
 
 
 if __name__ == "__main__":

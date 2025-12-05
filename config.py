@@ -44,6 +44,14 @@ def load_config():
         "BLINK_ENABLE": os.getenv("BLINK_ENABLE", "true").lower() == "true",
         "BLINK_THRESHOLD": int(os.getenv("BLINK_THRESHOLD", "160")),
         "ROW_SPACING": int(os.getenv("ROW_SPACING", "0")),  # 行间距，0表示默认
+        # RTSS集成配置
+        "RTSS_DISPLAY_FORMAT": os.getenv(
+            "RTSS_DISPLAY_FORMAT", "BPM {current} ({max}/{min})"
+        ),
+        "RTSS_UPDATE_INTERVAL": int(
+            os.getenv("RTSS_UPDATE_INTERVAL", "1")
+        ),  # 更新间隔（秒）
+        "DISPLAY_MODE": os.getenv("DISPLAY_MODE", "both"),  # both, default, rtss
     }
 
     return config
