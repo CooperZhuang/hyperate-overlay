@@ -8,6 +8,12 @@ dependencies = [
     "requests>=2.32.5",
     "websockets>=15.0.1",
     "python-dotenv>=1.0.0",
+    "pandas>=2.0.0",
+]
+
+[dependency-groups]
+plots = [
+    "matplotlib>=3.6.0",
 ]
 
 [build-system]
@@ -16,7 +22,7 @@ build-backend = "setuptools.build_meta"
 
 # 对于扁平布局（flat layout），使用py-modules而不是packages
 [tool.setuptools]
-py-modules = ["main", "config", "ui", "websocket_client"]
+py-modules = ["main", "config", "ui", "websocket_client", "stats_analyzer"]
 
 # 或者使用动态发现
 # packages = find:
