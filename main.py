@@ -8,6 +8,7 @@ Python 3.14 + uv + requests
 
 from config import ConfigWatcher, load_config
 from rtss_integration import RTSSIntegration
+from stats_analyzer import HeartRateStats
 from ui import HeartRateUI
 from websocket_client import WebSocketClient
 
@@ -16,6 +17,9 @@ class HyperateTripleOverlay:
     def __init__(self):
         # 加载配置
         self.config = load_config()
+
+        # 初始化心率统计分析器
+        self.stats_analyzer = HeartRateStats()
 
         # 初始化 UI
         self.ui = HeartRateUI(self.config)
@@ -38,8 +42,15 @@ class HyperateTripleOverlay:
     def update_heart_rate_callback(self, heart_rate):
         """
         心率数据更新回调函数
-        根据显示模式更新UI和/或RTSS显示
+        根据显示模式更新UI和/或RTSS显示，并记录统计数据
         """
+        try:
+            hr_int = int(heart_rate)
+            # 记录心率数据到统计分析器
+            self.stats_analyzer.add_heart_rate(hr_int)
+        except ValueError:
+            pass  # 忽略非数字值
+
         # 获取显示模式
         display_mode = self.config.get("DISPLAY_MODE", "both")
 
@@ -67,7 +78,22 @@ class HyperateTripleOverlay:
                         from config import load_config
 
                         new_config = load_config()
+                        old_display_mode = self.config.get("DISPLAY_MODE", "both")
                         self.config = new_config
+                        new_display_mode = new_config.get("DISPLAY_MODE", "both")
+
+                        # 检查显示模式是否改变
+                        if old_display_mode != new_display_mode:
+                            print(
+                                f"显示模式已从 {old_display_mode} 更改为 {new_display_mode}"
+                            )
+
+                            # 根据新模式显示或隐藏UI窗口
+                            if new_display_mode in ["both", "default"]:
+                                self.ui.show_window()
+                            elif new_display_mode == "rtss":
+                                self.ui.hide_window()
+
                         # 更新 UI 配置
                         self.ui.update_config(new_config)
                         # 更新RTSS配置

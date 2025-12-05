@@ -262,14 +262,22 @@ class HeartRateUI:
                     f"[{timestamp}] 当前: {self.current} BPM, 最高: {self.max_hr} BPM, 最低: {self.min_hr} BPM"
                 )
 
-            # 更新显示（如果需要）
+            # 更新显示（如果需要）- 使用线程安全的方式
             if update_display:
-                self.label_current.configure(text=self.current)
-                self.label_max.configure(text=self.max_hr)
-                self.label_min.configure(text=self.min_hr)
+                # 使用after在主线程中更新UI
+                self.root.after(0, self._update_display)
 
         except ValueError:
             pass  # 忽略非数字值
+
+    def _update_display(self):
+        """在主线程中更新显示内容"""
+        try:
+            self.label_current.configure(text=self.current)
+            self.label_max.configure(text=self.max_hr)
+            self.label_min.configure(text=self.min_hr)
+        except Exception as e:
+            print(f"更新显示时出错: {e}")
 
     def blink_loop(self):
         while True:
@@ -287,11 +295,16 @@ class HeartRateUI:
             self.current.isdigit()
             and int(self.current) > self.config["BLINK_THRESHOLD"]
         ):
-            self.label_current.configure(fg="white")
+            # 使用after在主线程中更新颜色
+            self.root.after(0, lambda: self.label_current.configure(fg="white"))
             time.sleep(0.15)
-            self.label_current.configure(fg=self.config["CURRENT_COLOR"])
+            self.root.after(
+                0, lambda: self.label_current.configure(fg=self.config["CURRENT_COLOR"])
+            )
             time.sleep(0.15)
-        self.label_current.configure(fg=self.config["CURRENT_COLOR"])
+        self.root.after(
+            0, lambda: self.label_current.configure(fg=self.config["CURRENT_COLOR"])
+        )
         self.blinking = False
 
     def update_display(self):
@@ -307,49 +320,76 @@ class HeartRateUI:
         self.root.mainloop()
 
     def update_config(self, new_config):
-        """更新配置（热重载）"""
-        try:
-            self.config = new_config
+        """更新配置（热重载）- 线程安全"""
 
-            # 更新窗口位置
-            self.root.geometry(f"+{self.config['POS_X']}+{self.config['POS_Y']}")
+        def _update_config_ui():
+            try:
+                self.config = new_config
 
-            # 更新窗口透明度
-            self.root.attributes("-alpha", self.config["OPACITY"])
+                # 更新窗口位置
+                self.root.geometry(f"+{self.config['POS_X']}+{self.config['POS_Y']}")
 
-            # 更新背景透明
-            bg_color = "black" if not self.config["BG_TRANSPARENT"] else "black"
-            self.root.configure(bg=bg_color)
-            if self.config["BG_TRANSPARENT"]:
-                self.root.attributes("-transparentcolor", "black")
-            else:
-                self.root.attributes("-transparentcolor", "")
+                # 更新窗口透明度
+                self.root.attributes("-alpha", self.config["OPACITY"])
 
-            # 更新字体大小
-            self.font_current.configure(size=self.config["CURRENT_FONT_SIZE"])
-            self.font_unit.configure(size=self.config["UNIT_SIZE"])
+                # 更新背景透明
+                bg_color = "black" if not self.config["BG_TRANSPARENT"] else "black"
+                self.root.configure(bg=bg_color)
+                if self.config["BG_TRANSPARENT"]:
+                    self.root.attributes("-transparentcolor", "black")
+                else:
+                    self.root.attributes("-transparentcolor", "")
 
-            # 更新颜色
-            self.label_current.configure(fg=self.config["CURRENT_COLOR"])
-            self.label_max.configure(fg=self.config["MAX_COLOR"])
-            self.label_min.configure(fg=self.config["MIN_COLOR"])
-            self.label_max_text.configure(fg=self.config["MAX_COLOR"])
-            self.label_min_text.configure(fg=self.config["MIN_COLOR"])
+                # 更新字体大小
+                self.font_current.configure(size=self.config["CURRENT_FONT_SIZE"])
+                self.font_unit.configure(size=self.config["UNIT_SIZE"])
 
-            # 更新背景颜色
-            for widget in [
-                self.label_current,
-                self.label_max,
-                self.label_max_text,
-                self.label_min,
-                self.label_min_text,
-            ]:
-                widget.configure(bg=bg_color)
+                # 更新颜色
+                self.label_current.configure(fg=self.config["CURRENT_COLOR"])
+                self.label_max.configure(fg=self.config["MAX_COLOR"])
+                self.label_min.configure(fg=self.config["MIN_COLOR"])
+                self.label_max_text.configure(fg=self.config["MAX_COLOR"])
+                self.label_min_text.configure(fg=self.config["MIN_COLOR"])
 
-            print(
-                f"显示配置已更新: 大小={self.config['CURRENT_SIZE']}(单位{self.config['UNIT_SIZE']}), "
-                f"位置={self.config['POS_X']},{self.config['POS_Y']}, 透明度={self.config['OPACITY']}"
-            )
+                # 更新背景颜色
+                for widget in [
+                    self.label_current,
+                    self.label_max,
+                    self.label_max_text,
+                    self.label_min,
+                    self.label_min_text,
+                ]:
+                    widget.configure(bg=bg_color)
 
-        except Exception as e:
-            print(f"更新显示配置时出错: {e}")
+                print(
+                    f"显示配置已更新: 大小={self.config['CURRENT_SIZE']}(单位{self.config['UNIT_SIZE']}), "
+                    f"位置={self.config['POS_X']},{self.config['POS_Y']}, 透明度={self.config['OPACITY']}"
+                )
+
+            except Exception as e:
+                print(f"更新显示配置时出错: {e}")
+
+        # 使用after在主线程中更新UI
+        self.root.after(0, _update_config_ui)
+
+    def show_window(self):
+        """显示UR窗口"""
+
+        def _show_window():
+            try:
+                self.root.deiconify()  # 显示窗口
+            except Exception as e:
+                print(f"显示UI窗口时出错: {e}")
+
+        self.root.after(0, _show_window)
+
+    def hide_window(self):
+        """隐藏UI窗口"""
+
+        def _hide_window():
+            try:
+                self.root.withdraw()  # 隐藏窗口
+            except Exception as e:
+                print(f"隐藏UI窗口时出错: {e}")
+
+        self.root.after(0, _hide_window)

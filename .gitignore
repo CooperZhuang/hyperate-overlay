@@ -11,3 +11,6 @@ wheels/
 
 # 配置文件（包含用户机密信息）
 .env
+
+# 日志
+heart_rate_data/
