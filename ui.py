@@ -158,6 +158,7 @@ class HeartRateUI:
         ):
             widget.bind("<Button-1>", self.start_move)
             widget.bind("<B1-Motion>", self.do_move)
+            widget.bind("<ButtonRelease-1>", self.stop_move)
 
         # 右键退出
         self.root.bind("<Button-3>", lambda e: sys.exit(0))
@@ -181,7 +182,10 @@ class HeartRateUI:
         self.config["POS_X"] = x
         self.config["POS_Y"] = y
 
-        # 保存位置到 .env 文件
+    def stop_move(self, event):
+        """鼠标松开时保存位置到 .env 文件"""
+        x = self.root.winfo_x()
+        y = self.root.winfo_y()
         self.save_position_to_env(x, y)
 
     def save_position_to_env(self, pos_x, pos_y):
@@ -217,8 +221,14 @@ class HeartRateUI:
         except Exception as e:
             print(f"保存位置到 .env 文件时出错: {e}")
 
-    def update_heart_rate(self, heart_rate):
-        """更新心率数据并计算最高/最低值"""
+    def update_heart_rate(self, heart_rate, update_display=True):
+        """
+        更新心率数据并计算最高/最低值
+
+        Args:
+            heart_rate: 心率值
+            update_display: 是否更新显示（默认True）
+        """
         if not heart_rate:
             return
 
@@ -251,6 +261,12 @@ class HeartRateUI:
                 print(
                     f"[{timestamp}] 当前: {self.current} BPM, 最高: {self.max_hr} BPM, 最低: {self.min_hr} BPM"
                 )
+
+            # 更新显示（如果需要）
+            if update_display:
+                self.label_current.configure(text=self.current)
+                self.label_max.configure(text=self.max_hr)
+                self.label_min.configure(text=self.min_hr)
 
         except ValueError:
             pass  # 忽略非数字值
