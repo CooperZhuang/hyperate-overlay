@@ -15,6 +15,12 @@ from websocket_client import WebSocketClient
 
 class HyperateTripleOverlay:
     def __init__(self):
+        """
+        初始化悬浮窗应用
+
+        加载配置并初始化所有必要的组件：心率统计器、UI界面、
+        RTSS集成、配置监视器和WebSocket客户端。
+        """
         # 加载配置
         self.config = load_config()
 
