@@ -373,7 +373,7 @@ class HeartRateUI:
         self.root.after(0, _update_config_ui)
 
     def show_window(self):
-        """显示UR窗口"""
+        """显示UI窗口"""
 
         def _show_window():
             try:
