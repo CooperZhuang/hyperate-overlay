@@ -1,6 +1,6 @@
 [project]
 name = "hyperate-overlay"
-version = "1.2.0"
+version = "1.2.1"
 description = "Hyperate 三值置顶悬浮窗 - 实时显示当前/最高/最低心率的透明悬浮窗应用"
 readme = "README.md"
 requires-python = ">=3.14"
