@@ -162,39 +162,11 @@ def _get_commit_message(current_version: str, new_version: str):
     default_msg = f"chore: bump version to {new_version}"
     print(f"默认提交信息: '{default_msg}'")
 
-    # 询问用户提交信息输入方式
-    print("\n请选择提交信息输入方式:")
-    print("1) 单行输入 (默认)")
-    print("2) 使用编辑器输入 (推荐，适合多行详细说明)")
-    print("   选择此项将打开VSCode编辑器，您可以在编辑器中输入多行提交信息")
-
-    input_choice = input("请选择 (1 或 2，默认 1): ").strip()
-
-    if input_choice == "2":
-        # 使用编辑器输入
-        print("\n✅ 将使用编辑器输入提交信息")
-        print("   提交时将打开VSCode编辑器，您可以在编辑器中输入多行提交信息")
-        print("   保存并关闭编辑器后，提交将继续执行")
-        return new_version, None  # 返回 None 表示使用编辑器
-    else:
-        # 单行输入
-        custom_msg = input("请输入提交信息 (直接回车使用默认值): ").strip()
-        commit_msg = custom_msg if custom_msg else default_msg
-
-        # 确认步骤
-        print()
-        print("请确认以下设置:")
-        print(f"当前版本: {current_version}")
-        print(f"新版本: {new_version}")
-        print(f"提交信息: {commit_msg}")
-        print()
-
-        confirm = input("确认提交更改? (y/N): ").strip().lower()
-        if confirm != "y":
-            print("❌ 用户取消")
-            sys.exit(0)
-
-        return new_version, commit_msg
+    # 直接使用编辑器输入
+    print("\n✅ 将使用编辑器输入提交信息")
+    print("   提交时将打开VSCode编辑器，您可以在编辑器中输入多行提交信息")
+    print("   保存并关闭编辑器后，提交将继续执行")
+    return new_version, None  # 返回 None 表示使用编辑器
 
 
 def interactive_mode():
