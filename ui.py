@@ -11,6 +11,7 @@ import sys
 import threading
 import time
 import tkinter as tk
+from queue import Queue
 from tkinter import font as tkfont
 
 
@@ -31,6 +32,9 @@ class HeartRateUI:
         self.blinking = False
         self.heart_rate_history = []  # 存储心率历史用于计算最高/最低
         self.max_history_size = 100  # 最大历史记录数
+
+        # 线程间通信队列
+        self.update_queue = Queue()
 
         self.root = tk.Tk()
 
@@ -307,11 +311,96 @@ class HeartRateUI:
         )
         self.blinking = False
 
+    def _process_queue(self):
+        """处理线程间通信队列中的请求"""
+        while True:
+            try:
+                msg = self.update_queue.get_nowait()
+                action, data = msg
+
+                if action == "update_config":
+                    self._update_config_from_queue(data)
+                elif action == "show_window":
+                    self._show_window_from_queue()
+                elif action == "hide_window":
+                    self._hide_window_from_queue()
+
+            except Exception:
+                break  # 队列为空时退出
+
+    def _update_config_from_queue(self, new_config):
+        """从队列处理配置更新请求"""
+        try:
+            self.config = new_config
+
+            # 更新窗口位置
+            self.root.geometry(f"+{self.config['POS_X']}+{self.config['POS_Y']}")
+
+            # 更新窗口透明度
+            self.root.attributes("-alpha", self.config["OPACITY"])
+
+            # 更新背景透明
+            bg_color = "black" if not self.config["BG_TRANSPARENT"] else "black"
+            self.root.configure(bg=bg_color)
+            if self.config["BG_TRANSPARENT"]:
+                self.root.attributes("-transparentcolor", "black")
+            else:
+                self.root.attributes("-transparentcolor", "")
+
+            # 更新字体大小
+            self.font_current.configure(size=self.config["CURRENT_FONT_SIZE"])
+            self.font_unit.configure(size=self.config["UNIT_SIZE"])
+
+            # 更新颜色
+            self.label_current.configure(fg=self.config["CURRENT_COLOR"])
+            self.label_max.configure(fg=self.config["MAX_COLOR"])
+            self.label_min.configure(fg=self.config["MIN_COLOR"])
+            self.label_max_text.configure(fg=self.config["MAX_COLOR"])
+            self.label_min_text.configure(fg=self.config["MIN_COLOR"])
+
+            # 更新背景颜色
+            for widget in [
+                self.label_current,
+                self.label_max,
+                self.label_max_text,
+                self.label_min,
+                self.label_min_text,
+            ]:
+                widget.configure(bg=bg_color)
+
+            print(
+                f"显示配置已更新: 大小={self.config['CURRENT_SIZE']}, "
+                f"位置={self.config['POS_X']},{self.config['POS_Y']}, 透明度={self.config['OPACITY']}"
+            )
+
+        except Exception as e:
+            print(f"更新显示配置时出错: {e}")
+
+    def _show_window_from_queue(self):
+        """从队列处理显示窗口请求"""
+        try:
+            self.root.deiconify()  # 显示窗口
+        except Exception as e:
+            print(f"显示UI窗口时出错: {e}")
+
+    def _hide_window_from_queue(self):
+        """从队列处理隐藏窗口请求"""
+        try:
+            self.root.withdraw()  # 隐藏窗口
+        except Exception as e:
+            print(f"隐藏UI窗口时出错: {e}")
+
     def update_display(self):
-        """更新显示内容"""
+        """更新显示内容并处理线程队列"""
+        # 更新显示内容
         self.label_current.configure(text=self.current)
         self.label_max.configure(text=self.max_hr)
         self.label_min.configure(text=self.min_hr)
+
+        # 处理线程队列中的请求
+        self._process_queue()
+
+        # 继续下一帧
         self.root.after(100, self.update_display)
 
     def run(self):
@@ -321,75 +410,15 @@ class HeartRateUI:
 
     def update_config(self, new_config):
         """更新配置（热重载）- 线程安全"""
-
-        def _update_config_ui():
-            try:
-                self.config = new_config
-
-                # 更新窗口位置
-                self.root.geometry(f"+{self.config['POS_X']}+{self.config['POS_Y']}")
-
-                # 更新窗口透明度
-                self.root.attributes("-alpha", self.config["OPACITY"])
-
-                # 更新背景透明
-                bg_color = "black" if not self.config["BG_TRANSPARENT"] else "black"
-                self.root.configure(bg=bg_color)
-                if self.config["BG_TRANSPARENT"]:
-                    self.root.attributes("-transparentcolor", "black")
-                else:
-                    self.root.attributes("-transparentcolor", "")
-
-                # 更新字体大小
-                self.font_current.configure(size=self.config["CURRENT_FONT_SIZE"])
-                self.font_unit.configure(size=self.config["UNIT_SIZE"])
-
-                # 更新颜色
-                self.label_current.configure(fg=self.config["CURRENT_COLOR"])
-                self.label_max.configure(fg=self.config["MAX_COLOR"])
-                self.label_min.configure(fg=self.config["MIN_COLOR"])
-                self.label_max_text.configure(fg=self.config["MAX_COLOR"])
-                self.label_min_text.configure(fg=self.config["MIN_COLOR"])
-
-                # 更新背景颜色
-                for widget in [
-                    self.label_current,
-                    self.label_max,
-                    self.label_max_text,
-                    self.label_min,
-                    self.label_min_text,
-                ]:
-                    widget.configure(bg=bg_color)
-
-                print(
-                    f"显示配置已更新: 大小={self.config['CURRENT_SIZE']}(单位{self.config['UNIT_SIZE']}), "
-                    f"位置={self.config['POS_X']},{self.config['POS_Y']}, 透明度={self.config['OPACITY']}"
-                )
-
-            except Exception as e:
-                print(f"更新显示配置时出错: {e}")
-
-        # 使用after在主线程中更新UI
-        self.root.after(0, _update_config_ui)
+        # 将更新请求放入队列，由主线程处理
+        self.update_queue.put(("update_config", new_config))
 
     def show_window(self):
         """显示UI窗口"""
-
-        def _show_window():
-            try:
-                self.root.deiconify()  # 显示窗口
-            except Exception as e:
-                print(f"显示UI窗口时出错: {e}")
-
-        self.root.after(0, _show_window)
+        # 将更新请求放入队列，由主线程处理
+        self.update_queue.put(("show_window", None))
 
     def hide_window(self):
         """隐藏UI窗口"""
-
-        def _hide_window():
-            try:
-                self.root.withdraw()  # 隐藏窗口
-            except Exception as e:
-                print(f"隐藏UI窗口时出错: {e}")
-
-        self.root.after(0, _hide_window)
+        # 将更新请求放入队列，由主线程处理
+        self.update_queue.put(("hide_window", None))
