@@ -3,7 +3,7 @@ name = "hyperate-overlay"
 version = "1.2.2"
 description = "Hyperate 三值置顶悬浮窗 - 实时显示当前/最高/最低心率的透明悬浮窗应用"
 readme = "README.md"
-requires-python = ">=3.14"
+requires-python = ">=3.10"
 dependencies = [
     "requests>=2.32.5",
     "websockets>=15.0.1",
@@ -20,15 +20,17 @@ plots = [
 requires = ["setuptools>=61.0", "wheel"]
 build-backend = "setuptools.build_meta"
 
-# 对于扁平布局（flat layout），使用py-modules而不是packages
 [tool.setuptools]
-py-modules = ["main", "config", "ui", "websocket_client", "stats_analyzer"]
-
-# 或者使用动态发现
-# packages = find:
-
-[tool.setuptools.package-data]
-"*" = ["*.py", "*.pyi"]
+py-modules = [
+    "main",
+    "config",
+    "ui",
+    "websocket_client",
+    "stats_analyzer",
+    "heart_rate_analyzer",
+    "rtss_integration",
+    "release",
+]
 
 [project.scripts]
 hyperate-overlay = "main:main"

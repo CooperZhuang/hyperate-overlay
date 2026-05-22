@@ -7,10 +7,13 @@
 """
 
 import argparse
+import logging
 import sys
 from pathlib import Path
 
 import pandas as pd
+
+logger = logging.getLogger(__name__)
 
 # 检查matplotlib是否可用
 try:
@@ -18,9 +21,7 @@ try:
 
     HAS_MATPLOTLIB = True
 except ImportError:
-    from typing import Any
-
-    plt: Any = None  # 避免undefined错误
+    plt = None  # type: ignore[assignment]
     HAS_MATPLOTLIB = False
 
 

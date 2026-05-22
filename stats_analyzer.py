@@ -6,7 +6,9 @@
 计算心率数据的统计信息和分析图表
 """
 
+import atexit
 import json
+import logging
 import os
 import threading
 import time
@@ -15,6 +17,8 @@ from datetime import datetime
 from typing import Dict, List, Optional
 
 import pandas as pd
+
+logger = logging.getLogger(__name__)
 
 
 class HeartRateStats:
@@ -48,8 +52,10 @@ class HeartRateStats:
         # 初始化日志文件
         self._init_log_file()
 
-        # 获取当前目录下的所有日志文件
-        print(f"数据存储目录: {os.path.abspath(self.data_dir)}")
+        # 注册退出清理
+        atexit.register(self._cleanup)
+
+        logger.info("数据存储目录: %s", os.path.abspath(self.data_dir))
 
     def _get_current_date(self) -> str:
         """获取当前日期字符串 (YYYY-MM-DD格式)"""
@@ -77,15 +83,15 @@ class HeartRateStats:
                 file_exists = os.path.exists(self.current_file)
                 self.file_handle = open(self.current_file, "a", encoding="utf-8")
 
-                # 如果是新文件，写入CSV头部
                 if not file_exists:
                     self.file_handle.write(
                         "timestamp,heart_rate,datetime,readable_time\n"
                     )
+                    self.file_handle.flush()
 
-                print(f"心率日志文件已创建: {self.current_file}")
+                logger.info("心率日志文件已创建: %s", self.current_file)
             except Exception as e:
-                print(f"创建日志文件失败: {e}")
+                logger.exception("创建日志文件失败: %s", e)
 
     def _ensure_correct_log_file(self, timestamp: float):
         """确保正在使用正确的日志文件（按日期）"""
@@ -102,10 +108,18 @@ class HeartRateStats:
             self.current_file = self._get_log_filename(file_date)
 
             try:
+                file_exists = os.path.exists(self.current_file)
                 self.file_handle = open(self.current_file, "a", encoding="utf-8")
-                print(f"切换到新日期日志文件: {self.current_file}")
+
+                if not file_exists:
+                    self.file_handle.write(
+                        "timestamp,heart_rate,datetime,readable_time\n"
+                    )
+                    self.file_handle.flush()
+
+                logger.info("切换到新日期日志文件: %s", self.current_file)
             except Exception as e:
-                print(f"创建新日期日志文件失败: {e}")
+                logger.exception("创建新日期日志文件失败: %s", e)
 
     def add_heart_rate(self, heart_rate: int, timestamp: Optional[float] = None):
         """
@@ -142,7 +156,7 @@ class HeartRateStats:
                     self.file_handle.write(data_line + "\n")
                     self.file_handle.flush()  # 立即刷新到磁盘
                 except Exception as e:
-                    print(f"写入心率数据失败: {e}")
+                    logger.exception("写入心率数据失败: %s", e)
 
     def get_recent_data(self, minutes: int = 5) -> List[Dict]:
         """
@@ -253,11 +267,11 @@ class HeartRateStats:
                     if filename.startswith("heart_rate_") and filename.endswith(".csv"):
                         file_path = os.path.join(self.data_dir, filename)
                         os.remove(file_path)
-                        print(f"删除日志文件: {filename}")
+                        logger.info("删除日志文件: %s", filename)
             except Exception as e:
-                print(f"删除日志文件时出错: {e}")
+                logger.exception("删除日志文件时出错: %s", e)
 
-            print("心率数据已清空")
+            logger.info("心率数据已清空")
 
             # 重新初始化日志文件
             self._init_log_file()
@@ -276,7 +290,7 @@ class HeartRateStats:
         data = self.get_recent_data(minutes) if minutes else self.get_all_data()
 
         if not data:
-            print("没有数据可导出")
+            logger.warning("没有数据可导出")
             return
 
         # 转换为DataFrame方便导出
@@ -295,12 +309,13 @@ class HeartRateStats:
                         dt = datetime.fromtimestamp(point["timestamp"])
                         f.write(f"{point['timestamp']},{point['heart_rate']},{dt}\n")
 
-            print(
-                f"数据已导出到 {filepath}\n格式: {format.upper()}, 数据点数量: {len(data)}"
+            logger.info(
+                "数据已导出到 %s\n格式: %s, 数据点数量: %d",
+                filepath, format.upper(), len(data)
             )
 
         except Exception as e:
-            print(f"导出数据失败: {e}")
+            logger.exception("导出数据失败: %s", e)
 
     def _calculate_slope(self, x: List[int], y: List[int]) -> float:
         """计算线性回归斜率"""
@@ -329,8 +344,8 @@ class HeartRateStats:
         else:
             return "稳定"
 
-    def __del__(self):
-        """析构函数，确保文件句柄被正确关闭"""
+    def _cleanup(self) -> None:
+        """退出时关闭文件句柄"""
         if self.file_handle:
             try:
                 self.file_handle.close()

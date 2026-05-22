@@ -1,122 +1,92 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
-"""
-UI 模块
-处理 Tkinter 界面和显示
-"""
+"""UI 模块 - Tkinter 界面和显示"""
 
-import os
+import logging
 import sys
 import threading
 import time
 import tkinter as tk
+from collections import deque
 from queue import Queue
 from tkinter import font as tkfont
 
+from config import ENV_FILE, HeartRateConfig
+
+logger = logging.getLogger(__name__)
+
 
 class HeartRateUI:
-    """心率显示界面类"""
+    """心率显示界面"""
 
-    def __init__(self, config):
-        """
-        初始化 UI
-
-        Args:
-            config: 配置字典
-        """
+    def __init__(self, config: HeartRateConfig) -> None:
         self.config = config
         self.current = "--"
         self.max_hr = "--"
         self.min_hr = "--"
-        self.blinking = False
-        self.heart_rate_history = []  # 存储心率历史用于计算最高/最低
-        self.max_history_size = 100  # 最大历史记录数
-
-        # 线程间通信队列
-        self.update_queue = Queue()
+        self._heart_rate_history: deque[int] = deque(maxlen=100)
+        self._update_queue: Queue = Queue()
 
         self.root = tk.Tk()
-
-        # 设置DPI缩放为1.5，提高渲染质量
         self.root.tk.call("tk", "scaling", 1.5)
-
         self.root.title("Hyperate Triple")
-        self.root.overrideredirect(True)  # 无边框
-        self.root.attributes("-topmost", True)  # 始终置顶
-        self.root.attributes("-alpha", self.config["OPACITY"])
+        self.root.overrideredirect(True)
+        self.root.attributes("-topmost", True)
+        self.root.attributes("-alpha", self.config.opacity)
 
-        bg_color = "black" if not self.config["BG_TRANSPARENT"] else "black"
+        bg_color = "black"
         self.root.configure(bg=bg_color)
-        if self.config["BG_TRANSPARENT"]:
+        if self.config.bg_transparent:
             self.root.attributes("-transparentcolor", "black")
 
-        self.root.geometry(f"+{self.config['POS_X']}+{self.config['POS_Y']}")
+        self.root.geometry(f"+{self.config.pos_x}+{self.config.pos_y}")
 
-        # 字体 - 添加抗锯齿和字体平滑优化
         self.font_current = tkfont.Font(
             family="Arial Black",
-            size=self.config["CURRENT_FONT_SIZE"],
-            weight="bold",  # UNIT_SIZE的两倍
+            size=self.config.current_font_size,
+            weight="bold",
         )
         self.font_unit = tkfont.Font(
             family="Arial",
-            size=self.config["UNIT_SIZE"],
-            weight="bold",  # Max/Min字体大小（70%）
+            size=self.config.unit_size,
+            weight="bold",
         )
 
-        # Windows特定的ClearType字体平滑设置
-        if sys.platform == "win32":
-            # 设置字体平滑选项
-            try:
-                # 在Tkinter中，字体平滑通常通过系统设置自动处理
-                # 我们可以尝试设置窗口的字体平滑属性
-                self.root.attributes("-alpha", self.config["OPACITY"])
+        self._build_ui(bg_color)
 
-                # 对于Windows，可以尝试设置字体平滑
-                try:
-                    # 尝试使用Tk的字体配置
-                    self.root.tk.eval("""
-                        if {[tk windowingsystem] eq "win32"} {
-                            # Windows特定的字体平滑设置
-                            option add *Font [font actual TkDefaultFont]
-                            option add *font [font actual TkDefaultFont]
-                        }
-                    """)
-                except Exception:
-                    pass
+        self.root.bind("<Button-3>", lambda e: sys.exit(0))
 
-                print("Windows字体平滑优化已应用")
-            except Exception as e:
-                print(f"设置字体平滑时出错: {e}")
+        if self.config.blink_enable:
+            threading.Thread(target=self._blink_loop, daemon=True).start()
 
-        # 紧凑布局：当前心率 + 最高/最低心率
+    def _build_ui(self, bg_color: str) -> None:
+        """构建 UI 组件"""
         main_frame = tk.Frame(self.root, bg=bg_color)
         main_frame.pack()
 
-        # 当前心率数值（大字体）
+        # 当前心率 (大字体)
         self.label_current = tk.Label(
             main_frame,
             text="--",
             font=self.font_current,
-            fg=self.config["CURRENT_COLOR"],
+            fg=self.config.current_color,
             bg=bg_color,
         )
         self.label_current.pack(side=tk.LEFT, padx=(0, 5))
 
-        # 最高/最低心率（紧凑排列在右侧）
+        # 右侧最高 / 最低心率
         right_frame = tk.Frame(main_frame, bg=bg_color)
         right_frame.pack(side=tk.LEFT)
 
-        # 最高心率行
         max_frame = tk.Frame(right_frame, bg=bg_color)
-        max_frame.pack(anchor="w", pady=(0, 0))
+        max_frame.pack(anchor="w")
 
         self.label_max = tk.Label(
             max_frame,
             text="--",
             font=self.font_unit,
-            fg=self.config["MAX_COLOR"],
+            fg=self.config.max_color,
             bg=bg_color,
         )
         self.label_max.pack(side=tk.LEFT)
@@ -125,20 +95,19 @@ class HeartRateUI:
             max_frame,
             text="Max",
             font=self.font_unit,
-            fg=self.config["MAX_COLOR"],
+            fg=self.config.max_color,
             bg=bg_color,
         )
         self.label_max_text.pack(side=tk.LEFT)
 
-        # 最低心率行
         min_frame = tk.Frame(right_frame, bg=bg_color)
-        min_frame.pack(anchor="w", pady=(0, 0))
+        min_frame.pack(anchor="w")
 
         self.label_min = tk.Label(
             min_frame,
             text="--",
             font=self.font_unit,
-            fg=self.config["MIN_COLOR"],
+            fg=self.config.min_color,
             bg=bg_color,
         )
         self.label_min.pack(side=tk.LEFT)
@@ -147,12 +116,12 @@ class HeartRateUI:
             min_frame,
             text="Min",
             font=self.font_unit,
-            fg=self.config["MIN_COLOR"],
+            fg=self.config.min_color,
             bg=bg_color,
         )
         self.label_min_text.pack(side=tk.LEFT)
 
-        # 拖动支持（包含所有文本标签）
+        # 拖动绑定
         for widget in (
             self.label_max,
             self.label_max_text,
@@ -160,51 +129,38 @@ class HeartRateUI:
             self.label_min,
             self.label_min_text,
         ):
-            widget.bind("<Button-1>", self.start_move)
-            widget.bind("<B1-Motion>", self.do_move)
-            widget.bind("<ButtonRelease-1>", self.stop_move)
+            widget.bind("<Button-1>", self._start_move)
+            widget.bind("<B1-Motion>", self._do_move)
+            widget.bind("<ButtonRelease-1>", self._stop_move)
 
-        # 右键退出
-        self.root.bind("<Button-3>", lambda e: sys.exit(0))
+    # -- 拖动 --
 
-        # 闪烁线程
-        if self.config["BLINK_ENABLE"]:
-            threading.Thread(target=self.blink_loop, daemon=True).start()
-
-    def start_move(self, event):
+    def _start_move(self, event: tk.Event) -> None:
         self._drag_x = event.x
         self._drag_y = event.y
 
-    def do_move(self, event):
+    def _do_move(self, event: tk.Event) -> None:
         dx = event.x - self._drag_x
         dy = event.y - self._drag_y
         x = self.root.winfo_x() + dx
         y = self.root.winfo_y() + dy
         self.root.geometry(f"+{x}+{y}")
+        self.config.pos_x = x
+        self.config.pos_y = y
 
-        # 更新配置中的位置
-        self.config["POS_X"] = x
-        self.config["POS_Y"] = y
+    def _stop_move(self, event: tk.Event) -> None:
+        self._save_position(self.root.winfo_x(), self.root.winfo_y())
 
-    def stop_move(self, event):
-        """鼠标松开时保存位置到 .env 文件"""
-        x = self.root.winfo_x()
-        y = self.root.winfo_y()
-        self.save_position_to_env(x, y)
-
-    def save_position_to_env(self, pos_x, pos_y):
+    def _save_position(self, pos_x: int, pos_y: int) -> None:
         """保存窗口位置到 .env 文件"""
         try:
-            env_file = ".env"
-            if not os.path.exists(env_file):
-                print(f"警告: {env_file} 文件不存在")
+            if not ENV_FILE.exists():
+                logger.warning("%s 文件不存在", ENV_FILE)
                 return
 
-            # 读取文件内容
-            with open(env_file, "r", encoding="utf-8") as f:
-                lines = f.readlines()
+            content = ENV_FILE.read_text(encoding="utf-8")
+            lines = content.splitlines(keepends=True)
 
-            # 更新 POS_X 和 POS_Y 的值
             updated = False
             for i, line in enumerate(lines):
                 if line.strip().startswith("POS_X="):
@@ -214,151 +170,158 @@ class HeartRateUI:
                     lines[i] = f"POS_Y={pos_y}\n"
                     updated = True
 
-            # 写入文件
             if updated:
-                with open(env_file, "w", encoding="utf-8") as f:
-                    f.writelines(lines)
-                print(f"位置已保存到 .env: POS_X={pos_x}, POS_Y={pos_y}")
+                ENV_FILE.write_text("".join(lines), encoding="utf-8")
+                logger.info(
+                    "位置已保存到 .env: POS_X=%d, POS_Y=%d", pos_x, pos_y
+                )
             else:
-                print("警告: 未找到 POS_X 或 POS_Y 配置项")
+                logger.warning("未找到 POS_X 或 POS_Y 配置项")
+        except Exception:
+            logger.exception("保存位置到 .env 文件时出错")
 
-        except Exception as e:
-            print(f"保存位置到 .env 文件时出错: {e}")
+    # -- 心率更新 --
 
-    def update_heart_rate(self, heart_rate, update_display=True):
-        """
-        更新心率数据并计算最高/最低值
-
-        Args:
-            heart_rate: 心率值
-            update_display: 是否更新显示（默认True）
-        """
+    def update_heart_rate(self, heart_rate: str, update_display: bool = True) -> None:
+        """更新心率数据"""
         if not heart_rate:
             return
 
         try:
             hr_int = int(heart_rate)
-            old_current = self.current
-            old_max = self.max_hr
-            old_min = self.min_hr
-
-            # 更新当前心率
-            self.current = str(hr_int)
-
-            # 添加到历史记录
-            self.heart_rate_history.append(hr_int)
-            if len(self.heart_rate_history) > self.max_history_size:
-                self.heart_rate_history.pop(0)
-
-            # 计算最高和最低心率
-            if self.heart_rate_history:
-                self.max_hr = str(max(self.heart_rate_history))
-                self.min_hr = str(min(self.heart_rate_history))
-
-            # 打印日志（如果值有变化）
-            if (
-                old_current != self.current
-                or old_max != self.max_hr
-                or old_min != self.min_hr
-            ):
-                timestamp = time.strftime("%H:%M:%S")
-                print(
-                    f"[{timestamp}] 当前: {self.current} BPM, 最高: {self.max_hr} BPM, 最低: {self.min_hr} BPM"
-                )
-
-            # 更新显示（如果需要）- 使用线程安全的方式
-            if update_display:
-                # 使用after在主线程中更新UI
-                self.root.after(0, self._update_display)
-
         except ValueError:
-            pass  # 忽略非数字值
+            return
 
-    def _update_display(self):
-        """在主线程中更新显示内容"""
+        old_current = self.current
+        old_max = self.max_hr
+        old_min = self.min_hr
+
+        self.current = str(hr_int)
+        self._heart_rate_history.append(hr_int)
+
+        if self._heart_rate_history:
+            self.max_hr = str(max(self._heart_rate_history))
+            self.min_hr = str(min(self._heart_rate_history))
+
+        if (
+            old_current != self.current
+            or old_max != self.max_hr
+            or old_min != self.min_hr
+        ):
+            logger.info(
+                "当前: %s BPM, 最高: %s BPM, 最低: %s BPM",
+                self.current,
+                self.max_hr,
+                self.min_hr,
+            )
+
+        if update_display:
+            self.root.after(0, self._update_labels)
+
+    def _update_labels(self) -> None:
+        """在主线程更新标签文字"""
         try:
             self.label_current.configure(text=self.current)
             self.label_max.configure(text=self.max_hr)
             self.label_min.configure(text=self.min_hr)
-        except Exception as e:
-            print(f"更新显示时出错: {e}")
+        except Exception:
+            logger.exception("更新显示时出错")
 
-    def blink_loop(self):
+    def get_display_values(self) -> tuple[str, str, str]:
+        """返回当前显示的心率值 (current, max, min)"""
+        return self.current, self.max_hr, self.min_hr
+
+    # -- 闪烁 --
+
+    def _blink_loop(self) -> None:
+        """单一线程处理闪烁效果，避免线程泄漏"""
         while True:
-            if (
-                self.current.isdigit()
-                and int(self.current) > self.config["BLINK_THRESHOLD"]
-                and not self.blinking
-            ):
-                self.blinking = True
-                threading.Thread(target=self.blink_effect, daemon=True).start()
-            time.sleep(0.5)
-
-    def blink_effect(self):
-        while (
-            self.current.isdigit()
-            and int(self.current) > self.config["BLINK_THRESHOLD"]
-        ):
-            # 使用after在主线程中更新颜色
-            self.root.after(0, lambda: self.label_current.configure(fg="white"))
-            time.sleep(0.15)
-            self.root.after(
-                0, lambda: self.label_current.configure(fg=self.config["CURRENT_COLOR"])
+            should_blink = (
+                self.config.blink_enable
+                and self.current.isdigit()
+                and int(self.current) > self.config.blink_threshold
             )
-            time.sleep(0.15)
-        self.root.after(
-            0, lambda: self.label_current.configure(fg=self.config["CURRENT_COLOR"])
-        )
-        self.blinking = False
+            if should_blink:
+                self.root.after(
+                    0, lambda: self.label_current.configure(fg="white")
+                )
+                time.sleep(0.15)
+                self.root.after(
+                    0,
+                    lambda: self.label_current.configure(
+                        fg=self.config.current_color
+                    ),
+                )
+                time.sleep(0.15)
+            else:
+                self.root.after(
+                    0,
+                    lambda: self.label_current.configure(
+                        fg=self.config.current_color
+                    ),
+                )
+                time.sleep(0.5)
 
-    def _process_queue(self):
-        """处理线程间通信队列中的请求"""
+    # -- 队列处理 --
+
+    def _process_queue(self) -> None:
+        """处理线程间通信队列"""
         while True:
             try:
-                msg = self.update_queue.get_nowait()
+                msg = self._update_queue.get_nowait()
                 action, data = msg
 
                 if action == "update_config":
-                    self._update_config_from_queue(data)
+                    self._apply_config(data)
                 elif action == "show_window":
-                    self._show_window_from_queue()
+                    self.root.deiconify()
                 elif action == "hide_window":
-                    self._hide_window_from_queue()
-
+                    self.root.withdraw()
             except Exception:
-                break  # 队列为空时退出
+                break
 
-    def _update_config_from_queue(self, new_config):
-        """从队列处理配置更新请求"""
+    def _process_queue_loop(self) -> None:
+        """定期处理队列 (不负责更新标签文字)"""
+        self._process_queue()
+        self.root.after(100, self._process_queue_loop)
+
+    # -- 配置热更新 --
+
+    def update_config(self, new_config: HeartRateConfig) -> None:
+        """线程安全的配置更新"""
+        self._update_queue.put(("update_config", new_config))
+
+    def show_window(self) -> None:
+        self._update_queue.put(("show_window", None))
+
+    def hide_window(self) -> None:
+        self._update_queue.put(("hide_window", None))
+
+    def _apply_config(self, new_config: HeartRateConfig) -> None:
+        """在主线程应用新配置"""
         try:
             self.config = new_config
+            self.root.geometry(
+                f"+{self.config.pos_x}+{self.config.pos_y}"
+            )
+            self.root.attributes("-alpha", self.config.opacity)
 
-            # 更新窗口位置
-            self.root.geometry(f"+{self.config['POS_X']}+{self.config['POS_Y']}")
-
-            # 更新窗口透明度
-            self.root.attributes("-alpha", self.config["OPACITY"])
-
-            # 更新背景透明
-            bg_color = "black" if not self.config["BG_TRANSPARENT"] else "black"
+            bg_color = "black"
             self.root.configure(bg=bg_color)
-            if self.config["BG_TRANSPARENT"]:
+            if self.config.bg_transparent:
                 self.root.attributes("-transparentcolor", "black")
             else:
                 self.root.attributes("-transparentcolor", "")
 
-            # 更新字体大小
-            self.font_current.configure(size=self.config["CURRENT_FONT_SIZE"])
-            self.font_unit.configure(size=self.config["UNIT_SIZE"])
+            self.font_current.configure(size=self.config.current_font_size)
+            self.font_unit.configure(size=self.config.unit_size)
 
-            # 更新颜色
-            self.label_current.configure(fg=self.config["CURRENT_COLOR"])
-            self.label_max.configure(fg=self.config["MAX_COLOR"])
-            self.label_min.configure(fg=self.config["MIN_COLOR"])
-            self.label_max_text.configure(fg=self.config["MAX_COLOR"])
-            self.label_min_text.configure(fg=self.config["MIN_COLOR"])
+            self.label_current.configure(fg=self.config.current_color)
+            self.label_max.configure(fg=self.config.max_color)
+            self.label_min.configure(fg=self.config.min_color)
+            self.label_max_text.configure(fg=self.config.max_color)
+            self.label_min_text.configure(fg=self.config.min_color)
 
-            # 更新背景颜色
             for widget in [
                 self.label_current,
                 self.label_max,
@@ -368,57 +331,19 @@ class HeartRateUI:
             ]:
                 widget.configure(bg=bg_color)
 
-            print(
-                f"显示配置已更新: 大小={self.config['CURRENT_SIZE']}, "
-                f"位置={self.config['POS_X']},{self.config['POS_Y']}, 透明度={self.config['OPACITY']}"
+            logger.info(
+                "显示配置已更新: 大小=%d, 位置=%d,%d, 透明度=%.2f",
+                self.config.current_size,
+                self.config.pos_x,
+                self.config.pos_y,
+                self.config.opacity,
             )
+        except Exception:
+            logger.exception("更新显示配置时出错")
 
-        except Exception as e:
-            print(f"更新显示配置时出错: {e}")
+    # -- 运行 --
 
-    def _show_window_from_queue(self):
-        """从队列处理显示窗口请求"""
-        try:
-            self.root.deiconify()  # 显示窗口
-        except Exception as e:
-            print(f"显示UI窗口时出错: {e}")
-
-    def _hide_window_from_queue(self):
-        """从队列处理隐藏窗口请求"""
-        try:
-            self.root.withdraw()  # 隐藏窗口
-        except Exception as e:
-            print(f"隐藏UI窗口时出错: {e}")
-
-    def update_display(self):
-        """更新显示内容并处理线程队列"""
-        # 更新显示内容
-        self.label_current.configure(text=self.current)
-        self.label_max.configure(text=self.max_hr)
-        self.label_min.configure(text=self.min_hr)
-
-        # 处理线程队列中的请求
-        self._process_queue()
-
-        # 继续下一帧
-        self.root.after(100, self.update_display)
-
-    def run(self):
-        """运行 UI 主循环"""
-        self.update_display()
+    def run(self) -> None:
+        """启动 UI 主循环"""
+        self._process_queue_loop()
         self.root.mainloop()
-
-    def update_config(self, new_config):
-        """更新配置（热重载）- 线程安全"""
-        # 将更新请求放入队列，由主线程处理
-        self.update_queue.put(("update_config", new_config))
-
-    def show_window(self):
-        """显示UI窗口"""
-        # 将更新请求放入队列，由主线程处理
-        self.update_queue.put(("show_window", None))
-
-    def hide_window(self):
-        """隐藏UI窗口"""
-        # 将更新请求放入队列，由主线程处理
-        self.update_queue.put(("hide_window", None))
