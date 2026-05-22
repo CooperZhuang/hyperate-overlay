@@ -8,11 +8,11 @@ import sys
 import threading
 import time
 
-from config import ConfigWatcher, HeartRateConfig
-from rtss_integration import RTSSIntegration
-from stats_analyzer import HeartRateStats
-from ui import HeartRateUI
-from websocket_client import WebSocketClient
+from .config import ConfigWatcher, HeartRateConfig
+from .rtss_integration import RTSSIntegration
+from .stats_analyzer import HeartRateStats
+from .ui import HeartRateUI
+from .websocket_client import WebSocketClient
 
 logger = logging.getLogger(__name__)
 

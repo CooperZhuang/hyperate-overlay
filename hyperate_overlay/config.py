@@ -14,7 +14,7 @@ from dotenv import load_dotenv
 logger = logging.getLogger(__name__)
 
 SCRIPT_DIR = Path(__file__).resolve().parent
-ENV_FILE = SCRIPT_DIR / ".env"
+ENV_FILE = SCRIPT_DIR.parent / ".env"
 
 
 @dataclass

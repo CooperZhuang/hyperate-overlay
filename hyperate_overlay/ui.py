@@ -12,7 +12,7 @@ from collections import deque
 from queue import Queue
 from tkinter import font as tkfont
 
-from config import ENV_FILE, HeartRateConfig
+from .config import ENV_FILE, HeartRateConfig
 
 logger = logging.getLogger(__name__)
 

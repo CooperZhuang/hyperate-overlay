@@ -11,12 +11,12 @@ import logging
 from ctypes import POINTER, c_bool, c_char_p, c_float, c_int, c_uint
 from pathlib import Path
 
-from config import HeartRateConfig
+from .config import HeartRateConfig
 
 logger = logging.getLogger(__name__)
 
 SCRIPT_DIR = Path(__file__).resolve().parent
-DLL_PATH = SCRIPT_DIR / "Saku RTSS CLI.dll"
+DLL_PATH = SCRIPT_DIR.parent / "lib" / "Saku RTSS CLI.dll"
 
 
 class RTSSIntegration:

@@ -14,7 +14,7 @@ import time
 import requests
 import websockets
 
-from config import HeartRateConfig, extract_channel_id
+from .config import HeartRateConfig, extract_channel_id
 
 logger = logging.getLogger(__name__)
 

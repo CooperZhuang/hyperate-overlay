@@ -21,16 +21,8 @@ requires = ["setuptools>=61.0", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [tool.setuptools]
-py-modules = [
-    "main",
-    "config",
-    "ui",
-    "websocket_client",
-    "stats_analyzer",
-    "heart_rate_analyzer",
-    "rtss_integration",
-    "release",
-]
+packages = ["hyperate_overlay"]
 
 [project.scripts]
-hyperate-overlay = "main:main"
+hyperate-overlay = "hyperate_overlay.main:main"
+hyperate-analyzer = "hyperate_overlay.heart_rate_analyzer:main"
